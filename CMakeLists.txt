@@ -118,8 +118,7 @@ install(TARGETS fmem
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 install(FILES
-  fmem.h
-  ${PROJECT_BINARY_DIR}/gen/fmem-export.h
+  ${PROJECT_BINARY_DIR}/gen/fmem.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 include (CTest)
