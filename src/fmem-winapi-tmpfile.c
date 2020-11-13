@@ -22,13 +22,21 @@ union fmem_conv {
 
 void fmem_init(fmem *file)
 {
+#ifdef _MSC_VER
+    union fmem_conv cv = { file };
+#else
     union fmem_conv cv = { .fm = file };
+#endif
     memset(cv.impl, 0, sizeof (*cv.impl));
 }
 
 void fmem_term(fmem *file)
 {
+#ifdef _MSC_VER
+    union fmem_conv cv = { file };
+#else
     union fmem_conv cv = { .fm = file };
+#endif
     if (cv.impl->mapping != NULL) {
         UnmapViewOfFile(cv.impl->base);
         CloseHandle(cv.impl->mapping);
@@ -37,8 +45,15 @@ void fmem_term(fmem *file)
 
 FILE *fmem_open(fmem *file, const char *mode)
 {
+#ifdef _MSC_VER
+    union fmem_conv cv = { file };
+#else
     union fmem_conv cv = { .fm = file };
+#endif
     char path[MAX_PATH];
+    HANDLE handle;
+    int fd;
+    FILE *f;
 
     DWORD rc = GetTempPathA(sizeof (path), path);
     errno = ENAMETOOLONG;
@@ -49,14 +64,15 @@ FILE *fmem_open(fmem *file, const char *mode)
     if (rc == 0)
         return NULL;
 
-    HANDLE handle = INVALID_HANDLE_VALUE;
+    handle = INVALID_HANDLE_VALUE;
     do {
         unsigned int randnum;
+        int wb;
         errno = rand_s(&randnum);
         if (errno)
             return NULL;
 
-        int wb = snprintf(&path[rc], MAX_PATH - rc, "\\fmem%x.tmp", randnum);
+        wb = snprintf(&path[rc], MAX_PATH - rc, "\\fmem%x.tmp", randnum);
         if (wb < 0)
             return NULL;
         if ((DWORD)wb > (DWORD)MAX_PATH - rc) {
@@ -73,13 +89,13 @@ FILE *fmem_open(fmem *file, const char *mode)
                 NULL);
     } while (handle == INVALID_HANDLE_VALUE);
 
-    int fd = _open_osfhandle((intptr_t) handle, _O_RDWR);
+    fd = _open_osfhandle((intptr_t) handle, _O_RDWR);
     if (fd == -1) {
         CloseHandle(handle);
         return NULL;
     }
 
-    FILE *f = _fdopen(fd, mode);
+    f = _fdopen(fd, mode);
     if (!f)
         _close(fd);
     cv.impl->file = f;
@@ -88,16 +104,24 @@ FILE *fmem_open(fmem *file, const char *mode)
 
 void fmem_mem(fmem *file, void **mem, size_t *size)
 {
+#ifdef _MSC_VER
+    union fmem_conv cv = { file };
+#else
     union fmem_conv cv = { .fm = file };
+#endif
+    HANDLE handle;
+    DWORD filesize;
+    HANDLE mapping;
+    void *base;
     *mem = NULL;
     *size = 0;
 
     if (!cv.impl->file)
         return;
 
-    HANDLE handle = (HANDLE) _get_osfhandle(_fileno(cv.impl->file));
+    handle = (HANDLE) _get_osfhandle(_fileno(cv.impl->file));
 
-    DWORD filesize = GetFileSize(handle, NULL);
+    filesize = GetFileSize(handle, NULL);
     if (filesize == INVALID_FILE_SIZE)
         return;
 
@@ -106,11 +130,11 @@ void fmem_mem(fmem *file, void **mem, size_t *size)
         CloseHandle(cv.impl->mapping);
     }
 
-    HANDLE mapping = CreateFileMapping(handle, NULL, PAGE_READWRITE, 0, 0, NULL);
+    mapping = CreateFileMapping(handle, NULL, PAGE_READWRITE, 0, 0, NULL);
     if (!mapping)
         return;
 
-    void *base = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+    base = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
     if (!base) {
         CloseHandle(mapping);
         return;
